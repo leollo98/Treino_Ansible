@@ -1,0 +1,52 @@
+#usar -e "windows_user=SeuUsuario"
+
+- name: Provisionar chave SSH no Linux e configurar Windows para login sem senha
+  hosts: 127.0.0.1
+  connection: local
+  tasks:
+
+    - name: Capturar usuário do Linux
+      ansible.builtin.command: whoami
+      register: linux_user
+      changed_when: false
+
+    - name: Gerar chave SSH
+      community.crypto.openssh_keypair:
+        path: "/home/{{ linux_user.stdout }}/.ssh/id_rsa"
+        type: rsa
+        size: 4096
+      register: ssh_key
+
+    - name: Armazenar chave pública para compartilhar com outros hosts
+      ansible.builtin.set_fact:
+        public_ssh_key: "{{ ssh_key.public_key }}"
+      delegate_to: localhost
+      run_once: true
+
+- name: Configurar SSH no Windows
+  hosts: app
+  tasks:
+    - name: Criar diretório .ssh no Windows
+      ansible.windows.win_file:
+        path: "C:\\Users\\{{ windows_user }}\\.ssh"
+        state: directory
+
+    - name: Copiar chave pública para Windows
+      ansible.windows.win_copy:
+        content: "{{ hostvars['127.0.0.1']['public_ssh_key'] }}"
+        dest: "C:\\Users\\{{ windows_user }}\\.ssh\\authorized_keys"
+
+    - name: Modificar sshd_config para permitir login por chave pública
+      community.windows.win_lineinfile:
+        path: C:\ProgramData\ssh\sshd_config
+        line: "{{ item }}"
+        create: yes
+      loop:
+        - "PubkeyAuthentication yes"
+        - "PasswordAuthentication yes"
+        - "AuthorizedKeysFile .ssh/authorized_keys"
+
+    - name: Reiniciar serviço SSH no Windows
+      ansible.windows.win_service:
+        name: sshd
+        state: restarted
