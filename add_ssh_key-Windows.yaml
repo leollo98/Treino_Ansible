@@ -43,7 +43,7 @@
         create: yes
       loop:
         - "PubkeyAuthentication yes"
-        - "PasswordAuthentication yes"
+        - "PasswordAuthentication no"
         - "AuthorizedKeysFile .ssh/authorized_keys"
 
     - name: Reiniciar serviço SSH no Windows
